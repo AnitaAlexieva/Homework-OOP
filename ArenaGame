@@ -1,0 +1,331 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace HW
+{
+
+    public class Hero
+    {
+        private static readonly Random random = new Random();
+
+        public string Name { get; private set; }
+        public int Health { get; private set; }
+        public int Strength { get; private set; }
+        protected int StartingHealth { get; private set; }
+        public bool IsDead { get { return Health <= 0; } }
+        public Weapon EquippedWeapon { get; private set; }
+
+        public Hero(string name)
+        {
+            Name = name;
+            Health = 500;
+            StartingHealth = Health;
+            Strength = 100;
+        }
+
+        public void EquipWeapon(Weapon weapon)
+        {
+            EquippedWeapon = weapon;
+        }
+
+        public virtual int Attack()
+        {
+            int baseAttack = (Strength * random.Next(80, 121)) / 100;
+            if (EquippedWeapon != null)
+            {
+                baseAttack = baseAttack * (100 + EquippedWeapon.DamageMultiplier) / 100;
+                if (EquippedWeapon.SpecialAbility != null)
+                {
+                    baseAttack = EquippedWeapon.SpecialAbility(baseAttack);
+                }
+            }
+            return baseAttack;
+        }
+        public virtual void PrintAttackInfo(string attackerName, string defenderName, int damageDealt, int defenderHealth)
+        {
+            Console.WriteLine($"{attackerName} attacks {defenderName} with {EquippedWeapon.Name}, dealing {damageDealt} damage.");
+            Console.WriteLine($"{defenderName} now has {Math.Max(defenderHealth, 0)} health remaining.");
+        }
+
+
+        public virtual void TakeDamage(int incomingDamage)
+        {
+            if (incomingDamage < 0) return;
+            Health -= incomingDamage;
+        }
+
+        protected virtual bool ThrowDice(int chance)
+        {
+            int dice = random.Next(101);
+            return dice <= chance;
+        }
+
+        protected void Heal(int value)
+        {
+            Health += value;
+            if (Health > StartingHealth) Health = StartingHealth;
+        }
+    }
+
+    public class Knight : Hero
+    {
+        const int BlockDamageChance = 10;
+        private const int ExtraDamageChance = 5;
+        private static readonly Random random = new Random();
+
+        public Knight() : this("Sir John")
+        {
+        }
+
+        public Knight(string name) : base(name)
+        {
+        }
+
+        public override void TakeDamage(int incomingDamage)
+        {
+            int damageReduceCoef = random.Next(20, 61);
+            incomingDamage = incomingDamage - ((incomingDamage * damageReduceCoef) / 100);
+            if (ThrowDice(BlockDamageChance)) incomingDamage = 0;
+            base.TakeDamage(incomingDamage);
+        }
+
+        public override int Attack()
+        {
+            int attack = base.Attack();
+            if (ThrowDice(ExtraDamageChance)) attack = attack * 150 / 100;
+            return attack;
+        }
+
+        protected override bool ThrowDice(int chance)
+        {
+            int dice = random.Next(101);
+            return dice <= chance;
+        }
+    }
+
+    public class Rogue : Hero
+    {
+        private const int TripleDamageMagicLastDigit = 5;
+        private const int HealEachNthRound = 3;
+        private int roundCount;
+
+        public Rogue(string name) : base(name)
+        {
+            roundCount = 0;
+        }
+
+        public override int Attack()
+        {
+            int attack = base.Attack();
+            if (attack % 25 == TripleDamageMagicLastDigit)
+            {
+                attack = attack * 3;
+            }
+            roundCount++;
+            if (roundCount % HealEachNthRound == 0 && ThrowDice(25))
+            {
+                Heal(StartingHealth * 50 / 100);
+            }
+            return attack;
+        }
+
+        public override void TakeDamage(int incomingDamage)
+        {
+            if (ThrowDice(30)) incomingDamage = 0;
+            base.TakeDamage(incomingDamage);
+        }
+    }
+    public class Wizard : Hero
+    {
+        private const int FireballChance = 10;
+        private const int HealEachNthRound = 3;
+        private int roundCount;
+
+        public Wizard(string name) : base(name)
+        {
+            roundCount = 0;
+        }
+
+        public override int Attack()
+        {
+            int baseAttack = base.Attack();
+            if (ThrowDice(FireballChance))
+            {
+                baseAttack = baseAttack * 150 / 100;
+            }
+            return baseAttack;
+        }
+
+        public override void TakeDamage(int incomingDamage)
+        {
+            if (ThrowDice(20))
+            {
+                incomingDamage = incomingDamage * 50 / 100;
+            }
+            base.TakeDamage(incomingDamage);
+        }
+    }
+
+    public class Barbarian : Hero
+    {
+        private const int CriticalStrikeChance = 15;
+        private const int RageDamageMultiplier = 2;
+        private int attackCount;
+
+        public Barbarian(string name) : base(name)
+        {
+            attackCount = 0;
+        }
+
+        public override int Attack()
+        {
+            int baseAttack = base.Attack();
+            attackCount++;
+            if (attackCount % 3 == 0 && ThrowDice(25))
+            {
+                baseAttack = baseAttack * RageDamageMultiplier;
+            }
+            else if (ThrowDice(CriticalStrikeChance))
+            {
+                baseAttack = baseAttack * 150 / 100;
+            }
+            return baseAttack;
+        }
+
+        public override void TakeDamage(int incomingDamage)
+        {
+            if (incomingDamage > 100)
+            {
+                incomingDamage -= 50;
+            }
+            base.TakeDamage(incomingDamage);
+        }
+    }
+    public class Weapon
+    {
+        public string Name { get; private set; }
+        public int DamageMultiplier { get; private set; }
+        public Func<int, int> SpecialAbility { get; private set; }
+
+        public Weapon(string name, int damageMultiplier, Func<int, int> specialAbility)
+        {
+            Name = name;
+            DamageMultiplier = damageMultiplier;
+            SpecialAbility = specialAbility;
+        }
+    }
+
+    public class Arena
+    {
+        private static readonly Random random = new Random();
+
+        public Hero HeroA { get; private set; }
+        public Hero HeroB { get; private set; }
+
+        public Arena(Hero a, Hero b)
+        {
+            HeroA = a;
+            HeroB = b;
+        }
+
+        public Hero Battle()
+        {
+            Hero attacker, defender;
+            if (random.Next(2) == 0)
+            {
+                attacker = HeroA;
+                defender = HeroB;
+            }
+            else
+            {
+                attacker = HeroB;
+                defender = HeroA;
+            }
+            while (true)
+            {
+                int damage = attacker.Attack();
+                defender.TakeDamage(damage);
+
+                attacker.PrintAttackInfo(attacker.Name, defender.Name, damage, defender.Health);
+
+                if (defender.IsDead) return attacker;
+                Hero tmp = attacker;
+                attacker = defender;
+                defender = tmp;
+            }
+        }
+    }
+
+    internal class Program
+    {
+        static void Main(string[] args)
+        {
+            Console.Write("Enter number of battles:");
+            int rounds = Int32.Parse(Console.ReadLine());
+
+            List<Hero> heroes = new List<Hero>
+    {
+        new Knight("Sir Lancelot"),
+        new Rogue("Robin Hood"),
+        new Wizard("Gandalf"),
+        new Barbarian("Conan"),
+        new Knight("Sir Camelot"),
+    };
+
+            heroes[0].EquipWeapon(new Weapon("Sword of Valor", 20, null));
+            heroes[1].EquipWeapon(new Weapon("Bow of Precision", 15, null));
+            heroes[2].EquipWeapon(new Weapon("Staff of Wisdom", 25, null));
+            heroes[3].EquipWeapon(new Weapon("Axe of Fury", 30, null));
+            heroes[4].EquipWeapon(new Weapon("Magic Sword", 10, null));
+
+            Dictionary<string, int> heroWins = new Dictionary<string, int>();
+            foreach (var hero in heroes)
+            {
+                heroWins[hero.Name] = 0; 
+            }
+
+            for (int round = 0; round < rounds; round++)
+            {
+                Console.WriteLine($"Round {round + 1}");
+
+                List<Hero> currentHeroes = heroes.Select(hero => (Hero)Activator.CreateInstance(hero.GetType(), hero.Name)).ToList();
+                currentHeroes[0].EquipWeapon(new Weapon("Sword of Valor", 20, null));
+                currentHeroes[1].EquipWeapon(new Weapon("Bow of Precision", 15, null));
+                currentHeroes[2].EquipWeapon(new Weapon("Staff of Wisdom", 25, null));
+                currentHeroes[3].EquipWeapon(new Weapon("Axe of Fury", 30, null));
+                currentHeroes[4].EquipWeapon(new Weapon("Magic Sword", 40, null));
+
+                Hero currentWinner = currentHeroes[0];
+
+                for (int i = 1; i < currentHeroes.Count; i++)
+                {
+                    Hero challenger = currentHeroes[i];
+                    Console.WriteLine($"Arena fight between: {currentWinner.Name} and {challenger.Name}");
+                    Arena arena = new Arena(currentWinner, challenger);
+
+                    Hero winner = arena.Battle();
+                    Console.WriteLine($"Winner is: {winner.Name}");
+                    currentWinner = winner; 
+                    Console.WriteLine();
+                }
+
+                Console.WriteLine($"Winner of round {round + 1} is: {currentWinner.Name}");
+                heroWins[currentWinner.Name]++; 
+            }
+
+            Console.WriteLine("\nOverall results:");
+            foreach (var heroWin in heroWins)
+            {
+                Console.WriteLine($"{heroWin.Key} has {heroWin.Value} wins.");
+            }
+
+            Console.ReadLine();
+        }
+
+    }
+}
